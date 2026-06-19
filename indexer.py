@@ -22,6 +22,7 @@ from models import embed_image
 BASE_DIR = Path(__file__).parent
 GALLERY_DIR = BASE_DIR / "gallery"
 CHROMA_DIR = str(BASE_DIR / "chroma_db")
+print(f"indexer.py using: {CHROMA_DIR}")
 SUPPORTED_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 
 
@@ -65,6 +66,7 @@ def setup_chroma():
         name="artworks",           # different collection name from photo organizer
         metadata={"hnsw:space": "cosine"}
     )
+
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────

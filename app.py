@@ -23,7 +23,6 @@ from search import (
     semantic_search,
     style_search,
     image_similarity_search,
-    combined_search,
 )
 from models import predict_style, embed_image_pil
 
@@ -329,7 +328,8 @@ def main():
         )
         st.session_state.tab = st.radio(
             "nav",
-            ["🔍 Search", "🖼 Browse Style", "🎨 Similar Art", "🧬 Multimodal Query", "📊 Evaluate"],
+            ["🔍 Search", "🖼 Browse Style", "🎨 Similar Art",
+             "🌌 Embedding Space", "📊 Evaluate"],
             label_visibility="collapsed",
         )
         st.divider()
@@ -616,118 +616,106 @@ def main():
                     st.info("No similar artworks found. Try lowering the threshold.")
 
     # ════════════════════════════════════════════════════════════════
-    # TAB: MULTIMODAL QUERY (image + text combined)
+    # TAB: EMBEDDING SPACE (visual proof the model understands art)
     # ════════════════════════════════════════════════════════════════
-    elif tab == "🧬 Multimodal Query":
-        st.markdown("# Multimodal Query")
+    elif tab == "🌌 Embedding Space":
+        st.markdown("# The Embedding Space")
         st.markdown(
-            '<div style="color:#888;font-size:13px;margin-bottom:1.2rem;">'
-            'Upload a painting and describe a change — a different mood, '
-            'palette, or style. The system searches using both the image '
-            'and your description combined into a single query.'
+            '<div style="color:#888;font-size:13px;margin-bottom:0.3rem;">'
+            'Every artwork is a single point in a 1152-dimensional space. '
+            'This is what that space actually looks like, compressed to 2D — '
+            'no manual labeling was used to create these clusters.'
+            '</div>'
+            '<div style="color:#666;font-size:11.5px;margin-bottom:1.2rem;font-style:italic;">'
+            'If SigLIP 2 truly understands visual style, paintings from the '
+            'same movement should land near each other — purely from how the '
+            'images look, not from their folder names.'
             '</div>',
             unsafe_allow_html=True
         )
 
-        uploaded = st.file_uploader(
-            "Upload a reference image",
-            type=["jpg", "jpeg", "png", "webp"],
-            key="combo_uploader",
-        )
+        @st.cache_data(show_spinner=False)
+        def compute_projection():
+            """Pull all embeddings from ChromaDB and reduce to 2D with UMAP."""
+            import numpy as np
+            col = load_chroma()
+            total = col.count()
+            if total == 0:
+                return None
+            raw = col.get(include=["embeddings", "metadatas"], limit=total)
+            embeddings = np.array(raw["embeddings"], dtype="float32")
+            metas      = raw["metadatas"]
+            ids        = raw["ids"]
 
-        if uploaded:
-            uploaded.seek(0)
-            pil = Image.open(uploaded).convert("RGB")
-
-            c1, c2 = st.columns([1, 2])
-            with c1:
-                st.image(pil, caption="Reference image", use_container_width=True)
-
-            with c2:
-                modifier = st.text_input(
-                    "Describe the change you want",
-                    placeholder='e.g.  "but with warmer autumn colors"  ·  '
-                                '"similar composition but baroque style"  ·  '
-                                '"more dramatic lighting"',
+            try:
+                from umap import UMAP
+                reducer = UMAP(
+                    n_components=2, n_neighbors=15, min_dist=0.15,
+                    metric="cosine", random_state=42,
                 )
+                coords = reducer.fit_transform(embeddings)
+            except ImportError:
+                # Fallback: PCA if umap-learn isn't installed
+                from sklearn.decomposition import PCA
+                coords = PCA(n_components=2, random_state=42).fit_transform(embeddings)
 
-                st.markdown(
-                    '<div class="sidebar-label" style="margin-top:12px;">'
-                    'Image ↔ Text balance</div>',
-                    unsafe_allow_html=True
-                )
-                image_weight = st.slider(
-                    "balance",
-                    0.0, 1.0, 0.7, 0.05,
-                    label_visibility="collapsed",
-                    help="1.0 = pure visual match, 0.0 = pure text match",
-                )
-                bal_col1, bal_col2 = st.columns(2)
-                with bal_col1:
-                    st.markdown(
-                        f'<div style="font-size:11px;color:#888;">'
-                        f'🖼 Image: {image_weight:.0%}</div>',
-                        unsafe_allow_html=True
-                    )
-                with bal_col2:
-                    st.markdown(
-                        f'<div style="font-size:11px;color:#888;text-align:right;">'
-                        f'📝 Text: {(1-image_weight):.0%}</div>',
-                        unsafe_allow_html=True
-                    )
+            return coords, metas, ids
 
-                go_combo = st.button(
-                    "Search with combined query 🔍", type="primary",
-                    disabled=not modifier.strip()
-                )
+        with st.spinner("Projecting the embedding space (first load only, cached after)…"):
+            projection = compute_projection()
 
-            if go_combo and modifier.strip():
-                with st.spinner("Combining image and text embeddings…"):
-                    combo_results = combined_search(
-                        pil,
-                        modifier.strip(),
-                        image_weight=image_weight,
-                        min_score=min_score,
-                        n=n_results,
-                        style_filter=style_filter,
-                    )
-
-                if combo_results:
-                    st.divider()
-                    st.markdown(
-                        f'<div style="color:#888;font-size:12px;margin-bottom:4px;">'
-                        f'{len(combo_results)} results for reference image '
-                        f'+ <em>"{modifier.strip()}"</em></div>'
-                        f'<div style="color:#555;font-size:11px;margin-bottom:12px;">'
-                        f'Weighting: {image_weight:.0%} image / {(1-image_weight):.0%} text'
-                        f'</div>',
-                        unsafe_allow_html=True
-                    )
-
-                    scores = [r["score"] for r in combo_results]
-                    with st.expander("Similarity distribution", expanded=False):
-                        import pandas as pd
-                        st.bar_chart(
-                            pd.DataFrame({"similarity": scores}),
-                            height=100, color="#c9a84c",
-                        )
-
-                    selected = artwork_grid(
-                        combo_results, selectable=True, key_prefix="combo"
-                    )
-                    if selected:
-                        st.divider()
-                        save_to_collection_ui(selected, key_suffix="combo")
-                else:
-                    st.info("No results. Try lowering the similarity threshold "
-                            "or adjusting the image/text balance.")
+        if projection is None:
+            st.info("No artworks indexed yet — run indexer.py first.")
         else:
+            coords, metas, ids = projection
+
+            import pandas as pd
+            df = pd.DataFrame({
+                "x":     coords[:, 0],
+                "y":     coords[:, 1],
+                "style": [m.get("style", "unknown") for m in metas],
+                "title": [m.get("title", "")[:40] for m in metas],
+                "id":    ids,
+            })
+
+            # Style filter for this tab specifically
+            visible_styles = st.multiselect(
+                "Show styles",
+                ALL_STYLES,
+                default=ALL_STYLES,
+            )
+            df_filtered = df[df["style"].isin(visible_styles)]
+
+            color_map = {s: STYLE_COLORS.get(s, "#888888") for s in ALL_STYLES}
+
+            try:
+                import plotly.express as px
+                fig = px.scatter(
+                    df_filtered, x="x", y="y", color="style",
+                    color_discrete_map=color_map,
+                    hover_data={"title": True, "x": False, "y": False, "style": True},
+                    height=560,
+                )
+                fig.update_traces(marker=dict(size=9, line=dict(width=1, color="#0c0c0d")))
+                fig.update_layout(
+                    plot_bgcolor="#0c0c0d", paper_bgcolor="#0c0c0d",
+                    font=dict(color="#f0ead6", family="Calibri"),
+                    legend=dict(bgcolor="#18181c", bordercolor="#262630", borderwidth=1),
+                    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=""),
+                    yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, title=""),
+                    margin=dict(l=10, r=10, t=10, b=10),
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            except ImportError:
+                st.warning("Install plotly for an interactive plot: pip install plotly")
+                st.scatter_chart(df_filtered, x="x", y="y", color="style")
+
             st.markdown(
-                '<div style="color:#555;font-size:12px;margin-top:1rem;">'
-                'Upload an image above to get started. Try uploading a baroque '
-                'painting and typing "but impressionist style" — watch how moving '
-                'the slider toward text shifts results away from the original '
-                'composition and toward the described style.'
+                '<div style="color:#666;font-size:11.5px;margin-top:0.5rem;font-style:italic;">'
+                'Tight, well-separated clusters indicate the model distinguishes these '
+                'styles purely from visual content. Overlapping clusters (e.g. baroque '
+                'and romanticism often share dramatic lighting) reflect genuine visual '
+                'similarity between movements, not a model failure.'
                 '</div>',
                 unsafe_allow_html=True
             )
