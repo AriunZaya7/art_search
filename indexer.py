@@ -22,7 +22,6 @@ from models import embed_image
 BASE_DIR = Path(__file__).parent
 GALLERY_DIR = BASE_DIR / "gallery"
 CHROMA_DIR = str(BASE_DIR / "chroma_db")
-print(f"indexer.py using: {CHROMA_DIR}")
 SUPPORTED_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 
 
@@ -30,16 +29,14 @@ SUPPORTED_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 
 def parse_filename(fname: str) -> dict:
     """
-    Extract artist and title from WikiArt filename convention.
-    Example: 'impressionism_001_the-water-lilies-1906.jpg'
-             → artist guessed from style, title = 'the water lilies 1906'
-    Also handles: 'claude-monet_water-lilies-1906.jpg'
+        Extract artist and title from WikiArt filename convention.
+        Example: 'impressionism_001_the-water-lilies-1906.jpg'
+                 → artist guessed from style, title = 'the water lilies 1906'
+        Also handles: 'claude-monet_water-lilies-1906.jpg'
     """
     stem = Path(fname).stem  # remove .jpg
-
     # Remove style prefix and index if present (e.g. 'impressionism_001_')
     stem = re.sub(r'^[a-z]+_\d+_', '', stem)
-
     # Replace hyphens with spaces, clean up
     readable = stem.replace("-", " ").replace("_", " ").strip()
 
@@ -48,9 +45,9 @@ def parse_filename(fname: str) -> dict:
 
 def get_style_from_path(img_path: Path) -> str:
     """
-    Returns the parent folder name as the style label.
-    gallery/impressionism/monet.jpg → 'impressionism'
-    If image is directly in gallery/ with no subfolder, returns 'unknown'.
+        Returns the parent folder name as the style label.
+        gallery/impressionism/monet.jpg → 'impressionism'
+        If image is directly in gallery/ with no subfolder, returns 'unknown'.
     """
     parent = img_path.parent
     if parent.name == "gallery" or parent == GALLERY_DIR:
@@ -63,10 +60,10 @@ def get_style_from_path(img_path: Path) -> str:
 def setup_chroma():
     client = chromadb.PersistentClient(path=CHROMA_DIR)
     return client.get_or_create_collection(
-        name="artworks",           # different collection name from photo organizer
+        # different collection name from photo organizer
+        name="artworks",
         metadata={"hnsw:space": "cosine"}
     )
-
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -80,7 +77,7 @@ def main():
 
     if not all_files:
         print(f"No images found in {GALLERY_DIR}")
-        print("Run download_wikiart.py first.")
+        print("Run data downloader script first.")
         return
 
     # Count per style for the summary
@@ -121,7 +118,28 @@ def main():
         try:
             # Visual embedding via SigLIP 2
             embedding = embed_image(str(img_path))
-            ocr_text = ""  # OCR not needed for paintings
+            ocr_text  = ""  # OCR not needed for paintings
+
+            # Parse metadata from filename and path
+            style  = get_style_from_path(img_path)
+            parsed = parse_filename(img_path.name)
+
+            # ── THIS WAS MISSING — the actual write to ChromaDB ──────────────
+            collection.upsert(
+                ids=[img_id],
+                embeddings=[embedding],
+                metadatas=[{
+                    "path":       str(img_path),
+                    "style":      style,
+                    "title":      parsed["title"],
+                    "filename":   img_path.name,
+                    "ocr_text":   ocr_text,
+                    "indexed_at": datetime.datetime.now().isoformat(),
+                }]
+            )
+
+            print(f"ok  [{style}]")
+            indexed += 1
 
         except Exception as e:
             print(f"ERROR: {e}")
@@ -133,7 +151,6 @@ def main():
     print(f"Skipped  : {skipped}")
     print(f"Errors   : {errors}")
     print(f"Total in DB : {collection.count()}")
-    print(f"\nNext step: streamlit run app.py")
 
 
 if __name__ == "__main__":

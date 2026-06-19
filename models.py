@@ -78,11 +78,11 @@ def embed_image_pil(pil_image) -> list:
 
 def embed_text(text: str) -> list:
     """
-    Returns a normalized SigLIP 2 embedding for a text query.
-    Used by app.py to embed search queries like:
-      'impressionist painting with warm sunset colors'
-      'dark dramatic baroque chiaroscuro'
-      'abstract geometric shapes primary colors'
+        Returns a normalized SigLIP 2 embedding for a text query.
+        Used by app.py to embed search queries like:
+          'impressionist painting with warm sunset colors'
+          'dark dramatic baroque chiaroscuro'
+          'abstract geometric shapes primary colors'
     """
     _load()
     tokens = _tokenizer([text])
@@ -123,14 +123,14 @@ def get_style_embeddings() -> dict:
 
 def predict_style(image_embedding: list, top_n: int = 3) -> list:
     """
-    Given an image embedding, returns the top N most likely art styles
-    as a list of (style_name, confidence_score) tuples.
+        Given an image embedding, returns the top N most likely art styles
+        as a list of (style_name, confidence_score) tuples.
 
-    Uses cosine similarity between the image and style text descriptions.
-    This is zero-shot classification — no training required.
+        Uses cosine similarity between the image and style text descriptions.
+        This is zero-shot classification — no training required.
 
-    Example output:
-      [('impressionism', 0.82), ('romanticism', 0.61), ('baroque', 0.45)]
+        Example output:
+          [('impressionism', 0.82), ('romanticism', 0.61), ('baroque', 0.45)]
     """
     style_embs = get_style_embeddings()
     img_tensor = torch.tensor(image_embedding)
@@ -155,9 +155,9 @@ _ocr_reader = None
 
 def extract_text(image_path: str) -> str:
     """
-    Extracts any visible text from an artwork image using EasyOCR.
-    Catches signatures, museum labels, inscriptions, or dates.
-    Returns empty string if no text found or on error.
+        Extracts any visible text from an artwork image using EasyOCR.
+        Catches signatures, museum labels, inscriptions, or dates.
+        Returns empty string if no text found or on error.
     """
     global _ocr_reader
     if _ocr_reader is None:

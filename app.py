@@ -2,11 +2,10 @@
 app.py — Art Style Search Engine
 Run with:  streamlit run app.py
 
-Tabs:
-  🔍 Search        — semantic text search across all artworks
-  🖼 Browse Style  — browse all paintings by art style
-  🎨 Similar Art   — upload an image, find visually similar artworks
-  📊 Evaluate      — interactive golden set evaluation (Precision@K, Recall@K)
+Loads the already built index/database.
+Loads the already built models.
+
+app.py is purely for inference.
 """
 
 import io
@@ -724,15 +723,21 @@ def main():
     # TAB: EVALUATE
     # ════════════════════════════════════════════════════════════════
     elif tab == "📊 Evaluate":
-        st.markdown("# Evaluation — Golden Set")
+        st.markdown("# Evaluation — Golden Set Builder")
         st.markdown(
             '<div style="color:#888;font-size:13px;margin-bottom:1.2rem;">'
-            'Run a query, mark which results are correct, '
-            'and get Precision@K and Recall@K metrics for your report.'
+            'Run a query, look at the actual images, check the ones that are '
+            'genuinely relevant, then click "Add to golden set". Repeat for '
+            'at least 5 different queries — then export everything at once '
+            'for evaluate.py.'
             '</div>',
             unsafe_allow_html=True
         )
 
+        if "golden_set" not in st.session_state:
+            st.session_state.golden_set = []  # list of {query, expected, k}
+
+        # ── Query + run ───────────────────────────────────────────────────────────
         with st.form("eval_form"):
             ec1, ec2 = st.columns([5, 1])
             with ec1:
@@ -747,68 +752,84 @@ def main():
         if erun and equery.strip():
             with st.spinner("Searching…"):
                 st.session_state.eval_results = semantic_search(
-                    equery.strip(),
-                    min_score=0.0,
-                    n=20,
-                    style_filter=style_filter,
+                    equery.strip(), min_score=0.0, n=20, style_filter=style_filter,
                 )
             st.session_state.eval_query = equery.strip()
 
-        if st.session_state.eval_results:
+        # ── Show results with checkboxes ─────────────────────────────────────────
+        if st.session_state.get("eval_results"):
             st.markdown(
                 f'<div style="color:#888;font-size:12px;margin-bottom:8px;">'
                 f'Results for <em>"{st.session_state.eval_query}"</em> — '
-                f'check the boxes on artworks that are relevant:</div>',
+                f'check the boxes on artworks that are genuinely relevant:</div>',
                 unsafe_allow_html=True
             )
 
             relevant = artwork_grid(
-                st.session_state.eval_results,
-                selectable=True,
-                key_prefix="eval"
+                st.session_state.eval_results, selectable=True, key_prefix="eval"
             )
 
             k = st.slider(
-                "K (evaluate top-K results)",
-                1,
-                min(20, len(st.session_state.eval_results)),
-                5,
+                "K (for this query's golden set entry)",
+                1, min(20, len(st.session_state.eval_results)), 5,
             )
 
             if relevant:
-                retrieved = [r["id"] for r in st.session_state.eval_results]
-                top_k     = set(retrieved[:k])
-                rel_ids   = set(r["id"] for r in relevant)
-                hits      = len(top_k & rel_ids)
-
-                precision = hits / k
-                recall    = hits / len(rel_ids) if rel_ids else 0
-
-                m1, m2, m3 = st.columns(3)
-                m1.metric(f"Precision@{k}", f"{precision:.2f}",
-                          help="Of top-K results, fraction that are relevant")
-                m2.metric(f"Recall@{k}",    f"{recall:.2f}",
-                          help="Of all marked relevant, fraction in top-K")
-                m3.metric("Relevant marked", len(relevant))
-
-                if precision >= 0.6:
-                    st.success("Good retrieval accuracy for this query.")
-                elif precision >= 0.3:
-                    st.warning("Moderate accuracy — try rephrasing or lowering threshold.")
-                else:
-                    st.error("Low accuracy — try a more descriptive query.")
-
-                with st.expander("Export for report"):
-                    rel_files = [r["filename"] for r in relevant]
-                    st.code(
-                        f'# Query: "{st.session_state.eval_query}"\n'
-                        f'# Precision@{k}: {precision:.2f}\n'
-                        f'# Recall@{k}: {recall:.2f}\n'
-                        f'expected = {rel_files}',
-                        language="python"
-                    )
+                st.success(f"{len(relevant)} artwork(s) marked relevant for this query.")
+                if st.button("➕ Add this query to golden set", type="primary"):
+                    st.session_state.golden_set.append({
+                        "query": st.session_state.eval_query,
+                        "expected": [r["id"] for r in relevant],
+                        "k": k,
+                    })
+                    st.session_state.eval_results = []
+                    st.session_state.eval_query = ""
+                    st.rerun()
             else:
-                st.info("Check the boxes above to mark relevant artworks.")
+                st.info("Check the boxes above on artworks that are relevant.")
+
+        # ── Accumulated golden set so far ─────────────────────────────────────────
+        st.divider()
+        n_done = len(st.session_state.golden_set)
+        st.markdown(f"### Golden set so far: {n_done} quer{'y' if n_done == 1 else 'ies'}")
+
+        if n_done < 5:
+            st.warning(f"The assignment requires at least 5 queries — {5 - n_done} more needed.")
+        else:
+            st.success("You've reached the minimum of 5 queries.")
+
+        for i, entry in enumerate(st.session_state.golden_set):
+            c1, c2 = st.columns([5, 1])
+            with c1:
+                st.markdown(f"**{i+1}. \"{entry['query']}\"** — {len(entry['expected'])} relevant, K={entry['k']}")
+            with c2:
+                if st.button("Remove", key=f"rm_golden_{i}"):
+                    st.session_state.golden_set.pop(i)
+                    st.rerun()
+
+        # ── Export everything as ready-to-paste Python ───────────────────────────
+        if n_done > 0:
+            st.divider()
+            st.markdown("### Export for evaluate.py")
+
+            lines = ["GOLDEN_SET = ["]
+            for entry in st.session_state.golden_set:
+                lines.append("    {")
+                lines.append(f'        "query":    {entry["query"]!r},')
+                lines.append(f'        "expected": {entry["expected"]!r},')
+                lines.append(f'        "k":        {entry["k"]},')
+                lines.append("    },")
+            lines.append("]")
+            export_code = "\n".join(lines)
+
+            st.code(export_code, language="python")
+            st.markdown(
+                '<div style="color:#888;font-size:11.5px;">'
+                'Copy this block and paste it over the GOLDEN_SET in evaluate.py, '
+                'then run <code>python evaluate.py</code> for the final Precision@K / Recall@K / MAP numbers.'
+                '</div>',
+                unsafe_allow_html=True
+            )
 
 
 if __name__ == "__main__":
