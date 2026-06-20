@@ -1,5 +1,3 @@
-# Art_search NLP x CV
-
 # Semantic Art Search
 
 A cross-modal retrieval system for searching a collection of paintings using natural language — built for an NLP & Computer Vision course project.
