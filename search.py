@@ -24,11 +24,11 @@ import chromadb
 
 from models import embed_text, embed_image_pil, predict_style
 
-BASE_DIR   = Path(__file__).parent
+BASE_DIR = Path(__file__).parent
 CHROMA_DIR = str(BASE_DIR / "chroma_db")
 
 MAX_RESULTS = 20
-MIN_SCORE   = 0.0   # lower default than photo organizer — art scores tend to be lower
+MIN_SCORE = 0.0
 
 
 # ── ChromaDB connection ───────────────────────────────────────────────────────
@@ -43,26 +43,26 @@ def get_collection():
 def semantic_search(query: str, min_score=MIN_SCORE, n=MAX_RESULTS,
                     limit_to=None, style_filter=None) -> list:
     """
-    Find artworks that match a natural language description.
+        Find artworks that match a natural language description.
 
-    Examples:
-      semantic_search("woman in a garden with soft light")
-      semantic_search("dark dramatic scene with candlelight")
-      semantic_search("geometric shapes and primary colors")
-      semantic_search("stormy seascape with dramatic sky")
+        Examples:
+          semantic_search("woman in a garden with soft light")
+          semantic_search("dark dramatic scene with candlelight")
+          semantic_search("geometric shapes and primary colors")
+          semantic_search("stormy seascape with dramatic sky")
 
-    Args:
-      query        : natural language description
-      min_score    : minimum cosine similarity (0.0 - 1.0)
-      n            : max results to return
-      limit_to     : list of artwork IDs to search within (for refine)
-      style_filter : only return artworks of this style (e.g. "baroque")
+        Args:
+          query        : natural language description
+          min_score    : minimum cosine similarity (0.0 - 1.0)
+          n            : max results to return
+          limit_to     : list of artwork IDs to search within (for refine)
+          style_filter : only return artworks of this style (e.g. "baroque")
 
-    Returns list of dicts with keys: id, score, style, title, path, ocr_text
+        Returns list of dicts with keys: id, score, style, title, path, ocr_text
     """
     collection = get_collection()
-    total      = max(collection.count(), 1)
-    embedding  = embed_text(query)
+    total = max(collection.count(), 1)
+    embedding = embed_text(query)
 
     raw = collection.query(
         query_embeddings=[embedding],
@@ -76,7 +76,7 @@ def semantic_search(query: str, min_score=MIN_SCORE, n=MAX_RESULTS,
     # Filter to a subset if refining
     if limit_to:
         limit_set = set(limit_to)
-        triples   = [(i, d, m) for i, d, m in zip(ids, distances, metas)
+        triples = [(i, d, m) for i, d, m in zip(ids, distances, metas)
                      if i in limit_set]
         if not triples:
             return []
@@ -113,7 +113,7 @@ def style_search(style: str, n=MAX_RESULTS) -> list:
       style_search("surrealism")
     """
     collection = get_collection()
-    total      = max(collection.count(), 1)
+    total = max(collection.count(), 1)
 
     raw = collection.get(
         where={"style": style},
@@ -138,20 +138,20 @@ def style_search(style: str, n=MAX_RESULTS) -> list:
 def image_similarity_search(pil_image, min_score=MIN_SCORE,
                              n=MAX_RESULTS, style_filter=None) -> list:
     """
-    Find artworks visually similar to an uploaded image.
-    Works for both artwork uploads AND real photos — SigLIP 2 handles both.
+        Find artworks visually similar to an uploaded image.
+        Works for both artwork uploads AND real photos — SigLIP 2 handles both.
 
-    Example use case: upload a photo of a sunset → find paintings with similar mood/colors
+        Example use case: upload a photo of a sunset → find paintings with similar mood/colors
 
-    Args:
-      pil_image    : PIL Image object
-      min_score    : minimum cosine similarity
-      n            : max results
-      style_filter : optionally limit to one style
+        Args:
+          pil_image    : PIL Image object
+          min_score    : minimum cosine similarity
+          n            : max results
+          style_filter : optionally limit to one style
     """
     collection = get_collection()
-    total      = max(collection.count(), 1)
-    embedding  = embed_image_pil(pil_image)
+    total = max(collection.count(), 1)
+    embedding = embed_image_pil(pil_image)
 
     raw = collection.query(
         query_embeddings=[embedding],
@@ -215,18 +215,18 @@ def combined_search(pil_image, text_modifier: str,
 
     text_weight = 1.0 - image_weight
 
-    img_emb  = np.array(embed_image_pil(pil_image), dtype="float32")
+    img_emb = np.array(embed_image_pil(pil_image), dtype="float32")
     text_emb = np.array(embed_text(text_modifier), dtype="float32")
 
     # Weighted sum, then renormalize to unit length so cosine similarity
     # in ChromaDB still behaves correctly.
     combined = image_weight * img_emb + text_weight * text_emb
-    norm     = np.linalg.norm(combined)
+    norm = np.linalg.norm(combined)
     if norm > 0:
         combined = combined / norm
 
     collection = get_collection()
-    total      = max(collection.count(), 1)
+    total = max(collection.count(), 1)
 
     raw = collection.query(
         query_embeddings=[combined.tolist()],
@@ -342,8 +342,8 @@ def main():
             if current_results is None:
                 print("  Nothing to refine — search first.\n")
                 continue
-            query   = user_input[len("refine:"):].strip()
-            ids     = [r["id"] for r in current_results]
+            query = user_input[len("refine:"):].strip()
+            ids = [r["id"] for r in current_results]
             current_results = semantic_search(query, n=10, limit_to=ids)
             print_results(current_results, f'Refined: "{query}"')
 

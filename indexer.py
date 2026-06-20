@@ -60,7 +60,6 @@ def get_style_from_path(img_path: Path) -> str:
 def setup_chroma():
     client = chromadb.PersistentClient(path=CHROMA_DIR)
     return client.get_or_create_collection(
-        # different collection name from photo organizer
         name="artworks",
         metadata={"hnsw:space": "cosine"}
     )
@@ -106,7 +105,7 @@ def main():
         # Use relative path as ID so it's unique across styles
         # e.g. "impressionism/impressionism_001_water-lilies.jpg"
         relative = img_path.relative_to(GALLERY_DIR)
-        img_id   = str(relative).replace("\\", "/")  # normalize Windows paths
+        img_id = str(relative).replace("\\", "/")  # normalize Windows paths
 
         if img_id in existing:
             print(f"[{i}/{len(all_files)}] skip  {img_id}")
@@ -118,13 +117,12 @@ def main():
         try:
             # Visual embedding via SigLIP 2
             embedding = embed_image(str(img_path))
-            ocr_text  = ""  # OCR not needed for paintings
+            ocr_text = ""  # OCR not needed for paintings
 
             # Parse metadata from filename and path
-            style  = get_style_from_path(img_path)
+            style = get_style_from_path(img_path)
             parsed = parse_filename(img_path.name)
 
-            # ── THIS WAS MISSING — the actual write to ChromaDB ──────────────
             collection.upsert(
                 ids=[img_id],
                 embeddings=[embedding],

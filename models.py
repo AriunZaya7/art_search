@@ -26,9 +26,9 @@ warnings.filterwarnings("ignore", message=".*symlinks.*")
 warnings.filterwarnings("ignore", message=".*QuickGELU.*")
 
 # ── Model ─────────────────────────────────────────────────────────────────────
-_model      = None
+_model = None
 _preprocess = None
-_tokenizer  = None
+_tokenizer = None
 
 
 def _load():

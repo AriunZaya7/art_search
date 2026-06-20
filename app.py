@@ -26,14 +26,14 @@ from search import (
 from models import predict_style, embed_image_pil
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-BASE_DIR    = Path(__file__).parent
+BASE_DIR = Path(__file__).parent
 GALLERY_DIR = BASE_DIR / "gallery"
-CHROMA_DIR  = str(BASE_DIR / "chroma_db")
+CHROMA_DIR = str(BASE_DIR / "chroma_db")
 SQLITE_FILE = BASE_DIR / "groups.db"
 
-COLS        = 4
+COLS = 4
 MAX_RESULTS = 40
-ALL_STYLES  = [
+ALL_STYLES = [
     "impressionism", "expressionism", "surrealism",
     "baroque", "abstract", "romanticism",
 ]
@@ -189,7 +189,7 @@ def load_db():
 
 def add_to_collection(name: str, artworks: list):
     conn = load_db()
-    now  = datetime.datetime.now().isoformat()
+    now = datetime.datetime.now().isoformat()
     conn.executemany(
         "INSERT OR IGNORE INTO collections "
         "(collection_name, artwork_id, path, style, title, added_at) "
@@ -430,8 +430,8 @@ def main():
                 search_breadcrumb(st.session_state.trail)
             with cb:
                 if st.button("Clear", use_container_width=True):
-                    st.session_state.results     = []
-                    st.session_state.trail       = ""
+                    st.session_state.results = []
+                    st.session_state.trail = ""
                     st.session_state.query_input = ""
                     st.rerun()
 
@@ -557,7 +557,7 @@ def main():
                 st.image(pil, caption="Query image", use_container_width=True)
 
                 with st.spinner("Analysing style…"):
-                    embedding   = embed_image_pil(pil)
+                    embedding = embed_image_pil(pil)
                     style_preds = predict_style(embedding, top_n=3)
 
                 st.markdown(
@@ -567,7 +567,7 @@ def main():
                 )
                 for style_name, conf in style_preds:
                     bar_width = int(conf * 100)
-                    color     = STYLE_COLORS.get(style_name, "#888")
+                    color = STYLE_COLORS.get(style_name, "#888")
                     st.markdown(
                         f'<div style="margin:3px 0;">'
                         f'<span style="font-size:11px;color:{color};width:90px;'
@@ -643,8 +643,8 @@ def main():
                 return None
             raw = col.get(include=["embeddings", "metadatas"], limit=total)
             embeddings = np.array(raw["embeddings"], dtype="float32")
-            metas      = raw["metadatas"]
-            ids        = raw["ids"]
+            metas = raw["metadatas"]
+            ids = raw["ids"]
 
             try:
                 from umap import UMAP
